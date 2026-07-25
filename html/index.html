@@ -1,219 +1,266 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-<meta charset="UTF-8">
-<title>Meshtastic Battery Monitor</title>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Meshtastic Battery Monitor</title>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
 
-<script>
-	Chart.register(window['chartjs-plugin-annotation']);
-</script>
+	<script>
+		// Registro correcto de los plugins
+		Chart.register(
+			window['chartjs-plugin-zoom'] || chartjsPluginZoom,
+			window['chartjs-plugin-annotation']
+		);
+	</script>
 
-<style>
+	<style>
+		body {
+			font-family: Arial, Helvetica, sans-serif;
+			margin: 30px;
+			background: #f4f4f4;
+		}
 
-body{
-	font-family:Arial,Helvetica,sans-serif;
-	margin:40px;
-	background:#fafafa;
-}
+		h1 {
+			margin-top: 0;
+		}
 
-h2{
-	margin-bottom:5px;
-}
+		#cards {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+			gap: 15px;
+			margin-bottom: 25px;
+		}
 
-#updated{
-	color:#666;
-	margin-bottom:20px;
-}
+		.card {
+			background: white;
+			border-radius: 8px;
+			box-shadow: 0 2px 5px rgba(0, 0, 0, .15);
+			padding: 15px;
+		}
 
-canvas{
-	background:white;
-	border:1px solid #ccc;
-	padding:10px;
-}
+		.card .title {
+			color: #666;
+			font-size: 14px;
+		}
 
-</style>
+		.card .value {
+			font-size: 32px;
+			font-weight: bold;
+			margin-top: 10px;
+		}
 
+		canvas {
+			background: white;
+			border-radius: 8px;
+			box-shadow: 0 2px 5px rgba(0, 0, 0, .15);
+		}
+	</style>
 </head>
 
 <body>
+	<h1>Meshtastic Battery Monitor</h1>
+	<div id="cards">
+		<div class="card">
+			<div class="title">Batería</div>
+			<div class="value" id="batteryValue">-- %</div>
+		</div>
 
-<h2>Meshtastic Battery Monitor</h2>
+		<div class="card">
+			<div class="title">Voltaje</div>
+			<div class="value" id="voltageValue">-- V</div>
+		</div>
 
-<div id="updated"></div>
+		<div class="card">
+			<div class="title">Uptime</div>
+			<div class="value" id="uptimeValue">--</div>
+		</div>
 
-<canvas id="batteryChart"></canvas>
+		<div class="card">
+			<div class="title">Última lectura</div>
+			<div class="value" id="timeValue" style="font-size:18px">--</div>
+		</div>
+	</div>
 
-<script>
+	<canvas id="chart" height="90"></canvas>
 
-let chart=null;
+	<script>
+		let chart = null;
 
-async function loadCSV(){
+		async function loadCSV() {
+			try {
+				const response = await fetch("battery.csv?" + Date.now());
+				const text = await response.text();
+				const lines = text.trim().split("\n");
+				lines.shift(); // Quitar cabecera
 
-	const battery = [];
-	const voltage = [];
-	const rebootLines = [];
-	
-	let previousUptime = null;
+				const battery = [];
+				const voltage = [];
+				const uptime = [];
+				const rebootLines = [];
 
-	const response = await fetch("battery.csv?"+Date.now());
-	const text = await response.text();
+				let previousUptime = null;
 
-	const lines=text.trim().split("\n");
+				for (const line of lines) {
+					if (line.trim() === "") continue;
 
-	lines.shift();
+					const cols = line.split(",");
+					const when = new Date(cols[0]);
+					let bat = Number(cols[1]);
 
-	for(const line of lines){
+					if (bat > 100) bat = 100;
 
-		const cols=line.split(",");
+					const volt = Number(cols[2]);
+					const up = Number(cols[3]);
 
-		let bat = Number(cols[1]);
-		
-		if (bat > 100)
-			bat = 100;
-		
-		battery.push({
-			x: new Date(cols[0]),
-			y: bat
-		});
-		
-		voltage.push({
-			x: new Date(cols[0]),
-			y: Number(cols[2])
-		});
-		const uptime = Number(cols[3]);
-		
-		if (previousUptime !== null && uptime < previousUptime) {
-				rebootLines.push({
-					type: 'line',
-					xMin: new Date(cols[0]),
-					xMax: new Date(cols[0]),
-					borderColor: 'red',
-					borderWidth: 2,
-					borderDash: [8,4],
-					label: {
-						enabled: true,
-						content: 'Reset',
-						position: 'start'
-					}
-				});
-			}
-		previousUptime = uptime;
-	}
+					battery.push({ x: when, y: bat });
+					voltage.push({ x: when, y: volt });
+					uptime.push({ x: when, y: up / 3600 });
 
-	document.getElementById("updated").innerHTML =
-		"Última actualización: "
-		+ new Date().toLocaleString();
-
-	if(chart){
-
-		chart.data.datasets[0].data=battery;
-		chart.data.datasets[1].data=voltage;
-		chart.update();
-
-		return;
-	}
-
-	chart=new Chart(
-
-		document.getElementById("batteryChart"),
-
-		{
-
-			type:"line",
-
-			data:{
-
-				datasets:[
-
-					{
-
-						label:"Batería (%)",
-
-						data:battery,
-
-						borderWidth:2,
-
-						tension:0.2,
-
-						yAxisID:"battery"
-
-					},
-
-					{
-
-						label:"Voltaje (V)",
-
-						data:voltage,
-
-						borderWidth:2,
-
-						tension:0.2,
-
-						yAxisID:"voltage"
-
+					if (previousUptime !== null && up < previousUptime) {
+						rebootLines.push(when);
 					}
 
-				]
-
-			},
-
-			options:{
-				plugins: {
-					annotation: {
-						annotations: rebootLines
-					}
-				},
-			
-				responsive:true,
-
-				interaction:{
-					intersect:false,
-					mode:"index"
-				},
-
-				scales:{
-
-					x:{
-						type:"time",
-						time:{
-							unit:"hour"
-						}
-					},
-
-					battery:{
-						type:"linear",
-						position:"left",
-						min:0,
-						max:100
-					},
-
-					voltage:{
-						type:"linear",
-						position:"right",
-						grid:{
-							drawOnChartArea:false
-						}
-					}
-
+					previousUptime = up;
 				}
 
-			}
+				if (battery.length === 0) return;
 
+				// Actualizar Cards
+				const lastBattery = battery[battery.length - 1].y;
+				const lastVoltage = voltage[voltage.length - 1].y;
+				const lastUptime = uptime[uptime.length - 1].y;
+				const lastTime = battery[battery.length - 1].x;
+
+				document.getElementById("batteryValue").innerText = lastBattery.toFixed(0) + " %";
+				document.getElementById("voltageValue").innerText = lastVoltage.toFixed(2) + " V";
+				document.getElementById("uptimeValue").innerText = lastUptime.toFixed(1) + " h";
+				document.getElementById("timeValue").innerText = lastTime.toLocaleString();
+
+				// Configurar Datasets
+				const datasets = [
+					{
+						label: "Batería (%)",
+						data: battery,
+						yAxisID: "battery",
+						tension: 0.2,
+						pointRadius: 2
+					},
+					{
+						label: "Voltaje (V)",
+						data: voltage,
+						yAxisID: "voltage",
+						tension: 0.2,
+						pointRadius: 2
+					},
+					{
+						label: "Uptime (h)",
+						data: uptime,
+						yAxisID: "uptime",
+						tension: 0,
+						pointRadius: 0
+					}
+				];
+
+				// Configurar Anotaciones (Resets)
+				const annotations = {};
+				rebootLines.forEach((r, i) => {
+					annotations["reset" + i] = {
+						type: "line",
+						xMin: r,
+						xMax: r,
+						borderColor: "red",
+						borderWidth: 2,
+						borderDash: [8, 4],
+						label: {
+							display: true,
+							content: "Reset",
+							position: "start",
+							rotation: 90
+						}
+					};
+				});
+
+				// Si el gráfico ya existe, actualizamos sus datos
+				if (chart) {
+					chart.data.datasets = datasets;
+					chart.options.plugins.annotation.annotations = annotations;
+					chart.update();
+					return;
+				}
+
+				// Crear gráfico por primera vez
+				const ctx = document.getElementById("chart").getContext("2d");
+				chart = new Chart(ctx, {
+					type: "line",
+					data: { datasets: datasets },
+					options: {
+						responsive: true,
+						maintainAspectRatio: true,
+						interaction: {
+							mode: "index",
+							intersect: false
+						},
+						plugins: {
+							legend: { position: "top" },
+							annotation: { annotations: annotations },
+							zoom: {
+								pan: { enabled: true, mode: "x" },
+								zoom: {
+									wheel: { enabled: true },
+									pinch: { enabled: true },
+									mode: "x"
+								}
+							}
+						},
+						scales: {
+							x: {
+								type: "time",
+								time: { unit: "hour" }
+							},
+							battery: {
+								type: "linear",
+								position: "left",
+								min: 0,
+								max: 100,
+								title: { display: true, text: "Batería (%)" }
+							},
+							voltage: {
+								type: "linear",
+								position: "right",
+								grid: { drawOnChartArea: false },
+								title: { display: true, text: "Voltaje (V)" }
+							},
+							uptime: {
+								type: "linear",
+								position: "right",
+								offset: true,
+								grid: { drawOnChartArea: false },
+								display: false
+							}
+						}
+					}
+				});
+
+			} catch (error) {
+				console.error("Error cargando o procesando battery.csv:", error);
+			}
 		}
 
-	);
+		// Ejecución inicial y temporizador
+		loadCSV();
+		setInterval(loadCSV, 60000);
 
-}
-
-loadCSV();
-
-setInterval(loadCSV,60000);
-
-</script>
-
+		// Reset Zoom con doble click
+		document.getElementById("chart").ondblclick = function () {
+			if (chart) chart.resetZoom();
+		};
+	</script>
 </body>
+
 </html>
