@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Meshtastic Battery Monitor</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+
+<script>
+	Chart.register(window['chartjs-plugin-annotation']);
+</script>
+
+<style>
+
+body{
+	font-family:Arial,Helvetica,sans-serif;
+	margin:40px;
+	background:#fafafa;
+}
+
+h2{
+	margin-bottom:5px;
+}
+
+#updated{
+	color:#666;
+	margin-bottom:20px;
+}
+
+canvas{
+	background:white;
+	border:1px solid #ccc;
+	padding:10px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h2>Meshtastic Battery Monitor</h2>
+
+<div id="updated"></div>
+
+<canvas id="batteryChart"></canvas>
+
+<script>
+
+let chart=null;
+
+async function loadCSV(){
+
+	const battery = [];
+	const voltage = [];
+	const rebootLines = [];
+	
+	let previousUptime = null;
+
+	const response = await fetch("battery.csv?"+Date.now());
+	const text = await response.text();
+
+	const lines=text.trim().split("\n");
+
+	lines.shift();
+
+	for(const line of lines){
+
+		const cols=line.split(",");
+
+		let bat = Number(cols[1]);
+		
+		if (bat > 100)
+			bat = 100;
+		
+		battery.push({
+			x: new Date(cols[0]),
+			y: bat
+		});
+		
+		voltage.push({
+			x: new Date(cols[0]),
+			y: Number(cols[2])
+		});
+		const uptime = Number(cols[3]);
+		
+		if (previousUptime !== null && uptime < previousUptime) {
+				rebootLines.push({
+					type: 'line',
+					xMin: new Date(cols[0]),
+					xMax: new Date(cols[0]),
+					borderColor: 'red',
+					borderWidth: 2,
+					borderDash: [8,4],
+					label: {
+						enabled: true,
+						content: 'Reset',
+						position: 'start'
+					}
+				});
+			}
+		previousUptime = uptime;
+	}
+
+	document.getElementById("updated").innerHTML =
+		"Última actualización: "
+		+ new Date().toLocaleString();
+
+	if(chart){
+
+		chart.data.datasets[0].data=battery;
+		chart.data.datasets[1].data=voltage;
+		chart.update();
+
+		return;
+	}
+
+	chart=new Chart(
+
+		document.getElementById("batteryChart"),
+
+		{
+
+			type:"line",
+
+			data:{
+
+				datasets:[
+
+					{
+
+						label:"Batería (%)",
+
+						data:battery,
+
+						borderWidth:2,
+
+						tension:0.2,
+
+						yAxisID:"battery"
+
+					},
+
+					{
+
+						label:"Voltaje (V)",
+
+						data:voltage,
+
+						borderWidth:2,
+
+						tension:0.2,
+
+						yAxisID:"voltage"
+
+					}
+
+				]
+
+			},
+
+			options:{
+				plugins: {
+					annotation: {
+						annotations: rebootLines
+					}
+				},
+			
+				responsive:true,
+
+				interaction:{
+					intersect:false,
+					mode:"index"
+				},
+
+				scales:{
+
+					x:{
+						type:"time",
+						time:{
+							unit:"hour"
+						}
+					},
+
+					battery:{
+						type:"linear",
+						position:"left",
+						min:0,
+						max:100
+					},
+
+					voltage:{
+						type:"linear",
+						position:"right",
+						grid:{
+							drawOnChartArea:false
+						}
+					}
+
+				}
+
+			}
+
+		}
+
+	);
+
+}
+
+loadCSV();
+
+setInterval(loadCSV,60000);
+
+</script>
+
+</body>
+</html>

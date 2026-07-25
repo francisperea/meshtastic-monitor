@@ -146,8 +146,8 @@ def reset_node():
 
 logging.info("==========================================")
 logging.info("Monitor iniciado")
-
-last_battery = time.time()
+last_battery = 0
+# last_battery = time.time()
 last_reset = time.time()
 
 while True:
