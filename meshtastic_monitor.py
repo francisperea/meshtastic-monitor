@@ -1,24 +1,28 @@
-#!/home/francis/meshtastic/bin/python
+#!/home/francis/meshtastic/bin/python3
 
+import csv
+import logging
+import re
 import subprocess
 import time
-import csv
-import re
-import logging
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-# ----------------------------------------------------
+# ==========================================================
 # CONFIGURACIÓN
-# ----------------------------------------------------
+# ==========================================================
 
 HOST = "192.168.1.50"
 NODE = "!9a8b7cf4"
 
 MESHTASTIC = "/home/francis/meshtastic/bin/meshtastic"
 
-RESET_HOUR = 4
-RESET_MINUTE = 0
+# Intervalos (segundos)
+
+BATTERY_INTERVAL = 120      # Producción: 3600
+RESET_INTERVAL = 600        # Producción: 86400
+RESET_WAIT = 25             # Espera tras reset
+LOOP_INTERVAL = 5           # Frecuencia del bucle principal
 
 BASE = Path("/home/francis/meshtastic")
 
@@ -34,17 +38,16 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s"
 )
 
-# ----------------------------------------------------
-
-last_hour = None
-last_reset_day = None
+# ==========================================================
 
 
 def run_command(args):
 
-    cmd = [MESHTASTIC,
-           "--host", HOST,
-           "--dest", NODE] + args
+    cmd = [
+        MESHTASTIC,
+        "--host", HOST,
+        "--dest", NODE,
+    ] + args
 
     try:
 
@@ -55,11 +58,14 @@ def run_command(args):
             timeout=120
         )
 
+        if result.returncode != 0:
+            logging.error(result.stderr.strip())
+
         return result.stdout
 
     except Exception as e:
 
-        logging.error(str(e))
+        logging.exception(e)
         return ""
 
 
@@ -67,25 +73,29 @@ def request_telemetry():
 
     output = run_command(["--request-telemetry"])
 
+    if not output:
+        return False
+
     battery = None
     voltage = None
     uptime = None
 
-    m = re.search(r'Battery level:\s+([0-9.]+)', output)
+    m = re.search(r"Battery level:\s+([0-9.]+)", output)
     if m:
         battery = float(m.group(1))
 
-    m = re.search(r'Voltage:\s+([0-9.]+)', output)
+    m = re.search(r"Voltage:\s+([0-9.]+)", output)
     if m:
         voltage = float(m.group(1))
 
-    m = re.search(r'Uptime:\s+([0-9]+)', output)
+    m = re.search(r"Uptime:\s+([0-9]+)", output)
     if m:
         uptime = int(m.group(1))
 
     if uptime is None:
-        logging.error("No se ha recibido telemetría")
-        return
+        logging.error("No se pudo obtener la telemetría.")
+        logging.error(output)
+        return False
 
     newfile = not CSVFILE.exists()
 
@@ -102,55 +112,56 @@ def request_telemetry():
             ])
 
         writer.writerow([
-            datetime.now().isoformat(sep=" "),
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             battery,
             voltage,
             uptime
         ])
 
     logging.info(
-        f"Battery={battery}% Voltage={voltage}V Uptime={uptime}s"
+        f"Battery={battery:.1f}%  Voltage={voltage:.2f}V  Uptime={uptime}s"
     )
+
+    return True
 
 
 def reset_node():
 
-    logging.info("Reseteando NodeDB")
+    logging.info("Ejecutando reset de NodeDB")
 
     output = run_command(["--reset-nodedb"])
 
-    if "ACK" not in output:
+    if "ACK" in output:
+        logging.info("ACK recibido")
+    else:
         logging.warning("No se recibió ACK")
+        logging.warning(output)
 
-    time.sleep(25)
+    time.sleep(RESET_WAIT)
 
     request_telemetry()
 
 
+# ==========================================================
+
+logging.info("==========================================")
 logging.info("Monitor iniciado")
+
+last_battery = time.time()
+last_reset = time.time()
 
 while True:
 
-    now = datetime.now()
+    now = time.time()
 
-    #
-    # Cada hora
-    #
-
-    if now.hour != last_hour:
+    if now - last_battery >= BATTERY_INTERVAL:
 
         request_telemetry()
-        last_hour = now.hour
+        last_battery = now
 
-    #
-    # Reset diario
-    #
-
-    if (now.hour == RESET_HOUR and
-        now.minute == RESET_MINUTE and
-        last_reset_day != now.date()):
+    if now - last_reset >= RESET_INTERVAL:
 
         reset_node()
-        last_reset_day = now.date()
+        last_reset = now
 
-    time.sleep(60)
+    time.sleep(LOOP_INTERVAL)
