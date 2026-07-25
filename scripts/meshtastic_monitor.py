@@ -20,7 +20,7 @@ MESHTASTIC = "/home/francis/meshtastic/bin/meshtastic"
 # Intervalos (segundos)
 
 BATTERY_INTERVAL = 3600      # Producción: 3600
-RESET_INTERVAL = 86400        # Producción: 86400
+RESET_INTERVAL = 43200       # Producción: 86400
 RESET_WAIT = 25             # Espera tras reset
 LOOP_INTERVAL = 5           # Frecuencia del bucle principal
 
