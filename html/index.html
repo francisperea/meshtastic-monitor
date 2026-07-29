@@ -190,6 +190,8 @@
 				if (chart) {
 					chart.data.datasets = datasets;
 					chart.options.plugins.annotation.annotations = annotations;
+					chart.options.scales.voltage.min = 3.0;
+					chart.options.scales.voltage.max = 4.1;
 					chart.update();
 					return;
 				}
@@ -230,11 +232,21 @@
 								max: 100,
 								title: { display: true, text: "Batería (%)" }
 							},
-							voltage: {
-								type: "linear",
-								position: "right",
-								grid: { drawOnChartArea: false },
-								title: { display: true, text: "Voltaje (V)" }
+							voltage: {		
+								type: "linear",							
+								position: "right",							
+								min: 3.0,							
+								max: 4.1,							
+								ticks: {							
+									stepSize: 0.1							
+								},							
+								grid: {							
+									drawOnChartArea: false							
+								},							
+								title: {							
+									display: true,							
+									text: "Voltaje (V)"							
+								}							
 							},
 							uptime: {
 								type: "linear",
