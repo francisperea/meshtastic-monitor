@@ -12,22 +12,23 @@ from pathlib import Path
 # CONFIGURACIÓN
 # ==========================================================
 
-HOST = "192.168.1.50"
+HOST = "homeassistant.francisperea.org"
 NODE = "!9a8b7cf4"
 
 MESHTASTIC = "/home/francis/meshtastic/bin/meshtastic"
 
 # Intervalos (segundos)
 
-BATTERY_INTERVAL = 3600      # Producción: 3600
-RESET_INTERVAL = 43200       # Producción: 86400
+BATTERY_INTERVAL = 300      # Producción: 3600
+RESET_INTERVAL = 10800       # Producción: 86400
 RESET_WAIT = 25             # Espera tras reset
 LOOP_INTERVAL = 5           # Frecuencia del bucle principal
 
 BASE = Path("/home/francis/meshtastic")
 
 LOGDIR = BASE / "logs"
-CSVFILE = LOGDIR / "battery.csv"
+#CSVFILE = LOGDIR / "EA7LDWGS_telemetry.csv"
+CSVFILE =  Path("/mnt/PiBacks/EA7LDWGS_telemetry.csv")
 LOGFILE = LOGDIR / "monitor.log"
 
 LOGDIR.mkdir(parents=True, exist_ok=True)
