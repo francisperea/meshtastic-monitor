@@ -3,62 +3,55 @@
 
 <head>
 	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="viewport" content="width=device-width,initial-scale=1">
 	<title>Meshtastic Battery Monitor</title>
-
 	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
 	<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
 	<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
-
 	<script>
-		// Registro correcto de los plugins
-		Chart.register(
-			window['chartjs-plugin-zoom'] || chartjsPluginZoom,
-			window['chartjs-plugin-annotation']
-		);
+		Chart.register(window['chartjs-plugin-zoom'] || chartjsPluginZoom, window['chartjs-plugin-annotation']);
 	</script>
-
 	<style>
 		body {
-			font-family: Arial, Helvetica, sans-serif;
-			margin: 30px;
-			background: #f4f4f4;
-		}
-
-		h1 {
-			margin-top: 0;
+			font-family: Arial;
+			margin: 20px;
+			background: #f4f4f4
 		}
 
 		#cards {
 			display: grid;
 			grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-			gap: 15px;
-			margin-bottom: 25px;
+			gap: 12px
 		}
 
 		.card {
-			background: white;
-			border-radius: 8px;
-			box-shadow: 0 2px 5px rgba(0, 0, 0, .15);
+			background: #fff;
 			padding: 15px;
-		}
-
-		.card .title {
-			color: #666;
-			font-size: 14px;
-		}
-
-		.card .value {
-			font-size: 32px;
-			font-weight: bold;
-			margin-top: 10px;
+			border-radius: 8px;
+			box-shadow: 0 2px 5px rgba(0, 0, 0, .15)
 		}
 
 		canvas {
-			background: white;
+			background: #fff;
 			border-radius: 8px;
 			box-shadow: 0 2px 5px rgba(0, 0, 0, .15);
+			margin-top: 20px;
+			height: 320px !important
+		}
+
+		table {
+			width: 100%;
+			background: #fff;
+			border-collapse: collapse;
+			margin-top: 20px
+		}
+
+		th,
+		td {
+			padding: 8px;
+			border-bottom: 1px solid #ddd;
+			text-align: left
 		}
 	</style>
 </head>
@@ -66,212 +59,134 @@
 <body>
 	<h1>Meshtastic Battery Monitor</h1>
 	<div id="cards">
-		<div class="card">
-			<div class="title">Batería</div>
-			<div class="value" id="batteryValue">-- %</div>
+		<div class="card"><b>Batería</b>
+			<div id="batteryValue">-- %</div>
 		</div>
-
-		<div class="card">
-			<div class="title">Voltaje</div>
-			<div class="value" id="voltageValue">-- V</div>
+		<div class="card"><b>Voltaje</b>
+			<div id="voltageValue">-- V</div>
 		</div>
-
-		<div class="card">
-			<div class="title">Uptime</div>
-			<div class="value" id="uptimeValue">--</div>
+		<div class="card"><b>Uptime</b>
+			<div id="uptimeValue">--</div>
 		</div>
-
-		<div class="card">
-			<div class="title">Última lectura</div>
-			<div class="value" id="timeValue" style="font-size:18px">--</div>
+		<div class="card"><b>Última lectura</b>
+			<div id="timeValue">--</div>
 		</div>
 	</div>
-
-	<canvas id="chart" height="90"></canvas>
-
+	<canvas id="voltageChart"></canvas>
+	<h2>Histórico de reinicios</h2>
+	<table>
+		<thead>
+			<tr>
+				<th>Fecha</th>
+				<th>Voltaje</th>
+				<th>Batería</th>
+				<th>Uptime anterior</th>
+			</tr>
+		</thead>
+		<tbody id="resetBody"></tbody>
+	</table>
 	<script>
-		let chart = null;
-
+		let chart;
 		async function loadCSV() {
-			try {
-				const response = await fetch("battery.csv?" + Date.now());
-				const text = await response.text();
-				const lines = text.trim().split("\n");
-				lines.shift(); // Quitar cabecera
-
-				const battery = [];
-				const voltage = [];
-				const uptime = [];
-				const rebootLines = [];
-
-				let previousUptime = null;
-
-				for (const line of lines) {
-					if (line.trim() === "") continue;
-
-					const cols = line.split(",");
-					const when = new Date(cols[0]);
-					let bat = Number(cols[1]);
-
-					if (bat > 100) bat = 100;
-
-					const volt = Number(cols[2]);
-					const up = Number(cols[3]);
-
-					battery.push({ x: when, y: bat });
-					voltage.push({ x: when, y: volt });
-					uptime.push({ x: when, y: up / 3600 });
-
-					if (previousUptime !== null && up < previousUptime) {
-						rebootLines.push(when);
-					}
-
-					previousUptime = up;
-				}
-
-				if (battery.length === 0) return;
-
-				// Actualizar Cards
-				const lastBattery = battery[battery.length - 1].y;
-				const lastVoltage = voltage[voltage.length - 1].y;
-				const lastUptime = uptime[uptime.length - 1].y;
-				const lastTime = battery[battery.length - 1].x;
-
-				document.getElementById("batteryValue").innerText = lastBattery.toFixed(0) + " %";
-				document.getElementById("voltageValue").innerText = lastVoltage.toFixed(2) + " V";
-				document.getElementById("uptimeValue").innerText = lastUptime.toFixed(1) + " h";
-				document.getElementById("timeValue").innerText = lastTime.toLocaleString();
-
-				// Configurar Datasets
-				const datasets = [
-					{
-						label: "Batería (%)",
-						data: battery,
-						yAxisID: "battery",
-						tension: 0.2,
-						pointRadius: 2
-					},
-					{
-						label: "Voltaje (V)",
-						data: voltage,
-						yAxisID: "voltage",
-						tension: 0.2,
-						pointRadius: 2
-					},
-					{
-						label: "Uptime (h)",
-						data: uptime,
-						yAxisID: "uptime",
-						tension: 0,
-						pointRadius: 0
-					}
-				];
-
-				// Configurar Anotaciones (Resets)
-				const annotations = {};
-				rebootLines.forEach((r, i) => {
-					annotations["reset" + i] = {
+			const txt = await (await fetch("battery.csv?" + Date.now())).text();
+			const lines = txt.trim().split("\n");
+			lines.shift();
+			const data = [],
+				ann = {},
+				resets = [];
+			let prev = null,
+				last = {};
+			for (const l of lines) {
+				if (!l.trim()) continue;
+				const c = l.split(",");
+				const d = new Date(c[0]),
+					b = Math.min(+c[1], 100),
+					v = +c[2],
+					u = +c[3];
+				data.push({
+					x: d,
+					y: v
+				});
+				last = {
+					b,
+					v,
+					u,
+					d
+				};
+				if (prev !== null && u < prev) {
+					ann["r" + resets.length] = {
 						type: "line",
-						xMin: r,
-						xMax: r,
+						xMin: d,
+						xMax: d,
 						borderColor: "red",
-						borderWidth: 2,
-						borderDash: [8, 4],
-						label: {
-							display: true,
-							content: "Reset",
-							position: "start",
-							rotation: 90
-						}
+						borderWidth: 2
 					};
-				});
-
-				// Si el gráfico ya existe, actualizamos sus datos
-				if (chart) {
-					chart.data.datasets = datasets;
-					chart.options.plugins.annotation.annotations = annotations;
-					chart.options.scales.voltage.min = 3.0;
-					chart.options.scales.voltage.max = 4.1;
-					chart.update();
-					return;
+					resets.push({
+						d,
+						b,
+						v,
+						p: prev / 3600
+					});
 				}
-
-				// Crear gráfico por primera vez
-				const ctx = document.getElementById("chart").getContext("2d");
-				chart = new Chart(ctx, {
-					type: "line",
-					data: { datasets: datasets },
-					options: {
-						responsive: true,
-						maintainAspectRatio: true,
-						interaction: {
-							mode: "index",
-							intersect: false
+				prev = u;
+			}
+			batteryValue.textContent = last.b.toFixed(0) + " %";
+			voltageValue.textContent = last.v.toFixed(2) + " V";
+			uptimeValue.textContent = (last.u / 3600).toFixed(1) + " h";
+			timeValue.textContent = last.d.toLocaleString();
+			resetBody.innerHTML = "";
+			resets.reverse().forEach(r => resetBody.insertAdjacentHTML("beforeend", `<tr><td>${r.d.toLocaleString()}</td><td>${r.v.toFixed(2)} V</td><td>${r.b.toFixed(0)} %</td><td>${r.p.toFixed(1)} h</td></tr>`));
+			if (chart) {
+				chart.data.datasets[0].data = data;
+				chart.options.plugins.annotation.annotations = ann;
+				chart.update();
+				return;
+			}
+			chart = new Chart(voltageChart, {
+				type: "line",
+				data: {
+					datasets: [{
+						data,
+						label: "Voltaje",
+						borderWidth: 2,
+						tension: .2
+					}]
+				},
+				options: {
+					plugins: {
+						legend: {
+							display: false
 						},
-						plugins: {
-							legend: { position: "top" },
-							annotation: { annotations: annotations },
+						annotation: {
+							annotations: ann
+						},
+						zoom: {
+							pan: {
+								enabled: true,
+								mode: "x"
+							},
 							zoom: {
-								pan: { enabled: true, mode: "x" },
-								zoom: {
-									wheel: { enabled: true },
-									pinch: { enabled: true },
-									mode: "x"
-								}
+								wheel: {
+									enabled: true
+								},
+								mode: "x"
 							}
+						}
+					},
+					scales: {
+						x: {
+							type: "time"
 						},
-						scales: {
-							x: {
-								type: "time",
-								time: { unit: "hour" }
-							},
-							battery: {
-								type: "linear",
-								position: "left",
-								min: 0,
-								max: 100,
-								title: { display: true, text: "Batería (%)" }
-							},
-							voltage: {		
-								type: "linear",							
-								position: "right",							
-								min: 3.0,							
-								max: 4.1,							
-								ticks: {							
-									stepSize: 0.1							
-								},							
-								grid: {							
-									drawOnChartArea: false							
-								},							
-								title: {							
-									display: true,							
-									text: "Voltaje (V)"							
-								}							
-							},
-							uptime: {
-								type: "linear",
-								position: "right",
-								offset: true,
-								grid: { drawOnChartArea: false },
-								display: false
-							}
+						y: {
+							min: 3.5,
+							max: 4.2
 						}
 					}
-				});
-
-			} catch (error) {
-				console.error("Error cargando o procesando battery.csv:", error);
-			}
+				}
+			});
 		}
-
-		// Ejecución inicial y temporizador
 		loadCSV();
 		setInterval(loadCSV, 60000);
-
-		// Reset Zoom con doble click
-		document.getElementById("chart").ondblclick = function () {
-			if (chart) chart.resetZoom();
-		};
 	</script>
 </body>
 
