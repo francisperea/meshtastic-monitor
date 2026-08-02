@@ -53,6 +53,18 @@
 			border-bottom: 1px solid #ddd;
 			text-align: left
 		}
+		
+		#chartContainer {	
+			position: relative;		
+			width: 100%;		
+			height: 380px;		
+			background: white;		
+			border-radius: 8px;		
+			box-shadow: 0 2px 5px rgba(0,0,0,.15);		
+			padding: 10px;		
+			box-sizing: border-box;		
+			margin-top: 20px;
+		}
 	</style>
 </head>
 
@@ -72,7 +84,11 @@
 			<div id="timeValue">--</div>
 		</div>
 	</div>
-	<canvas id="voltageChart"></canvas>
+	
+	<div id="chartContainer">
+			<canvas id="voltageChart"></canvas>
+	</div>
+	
 	<h2>Histórico de reinicios</h2>
 	<table>
 		<thead>
@@ -86,107 +102,155 @@
 		<tbody id="resetBody"></tbody>
 	</table>
 	<script>
-		let chart;
-		async function loadCSV() {
-			const txt = await (await fetch("battery.csv?" + Date.now())).text();
-			const lines = txt.trim().split("\n");
-			lines.shift();
-			const data = [],
-				ann = {},
-				resets = [];
-			let prev = null,
-				last = {};
-			for (const l of lines) {
-				if (!l.trim()) continue;
-				const c = l.split(",");
-				const d = new Date(c[0]),
-					b = Math.min(+c[1], 100),
-					v = +c[2],
-					u = +c[3];
-				data.push({
-					x: d,
-					y: v
-				});
-				last = {
+	let chart;
+	
+	async function loadCSV() {
+		const txt = await (await fetch("battery.csv?" + Date.now())).text();
+		const lines = txt.trim().split("\n");
+		lines.shift();
+	
+		const data = [];
+		const ann = {};
+		const resets = [];
+	
+		let prev = null;
+		let last = {};
+	
+		for (const l of lines) {
+			if (!l.trim()) continue;
+	
+			const c = l.split(",");
+			const d = new Date(c[0]);
+			const b = Math.min(Number(c[1]), 100);
+			const v = Number(c[2]);
+			const u = Number(c[3]);
+	
+			data.push({
+				x: d,
+				y: v
+			});
+	
+			last = { b, v, u, d };
+	
+			if (prev !== null && u < prev) {
+				ann["r" + resets.length] = {
+					type: "line",
+					xMin: d,
+					xMax: d,
+					borderColor: "red",
+					borderWidth: 2,
+					borderDash: [6, 4]
+				};
+	
+				resets.push({
+					d,
 					b,
 					v,
-					u,
-					d
-				};
-				if (prev !== null && u < prev) {
-					ann["r" + resets.length] = {
-						type: "line",
-						xMin: d,
-						xMax: d,
-						borderColor: "red",
-						borderWidth: 2
-					};
-					resets.push({
-						d,
-						b,
-						v,
-						p: prev / 3600
-					});
-				}
-				prev = u;
+					p: prev / 3600
+				});
 			}
-			batteryValue.textContent = last.b.toFixed(0) + " %";
-			voltageValue.textContent = last.v.toFixed(2) + " V";
-			uptimeValue.textContent = (last.u / 3600).toFixed(1) + " h";
-			timeValue.textContent = last.d.toLocaleString();
-			resetBody.innerHTML = "";
-			resets.reverse().forEach(r => resetBody.insertAdjacentHTML("beforeend", `<tr><td>${r.d.toLocaleString()}</td><td>${r.v.toFixed(2)} V</td><td>${r.b.toFixed(0)} %</td><td>${r.p.toFixed(1)} h</td></tr>`));
-			if (chart) {
-				chart.data.datasets[0].data = data;
-				chart.options.plugins.annotation.annotations = ann;
-				chart.update();
-				return;
-			}
-			chart = new Chart(voltageChart, {
-				type: "line",
-				data: {
-					datasets: [{
-						data,
-						label: "Voltaje",
-						borderWidth: 2,
-						tension: .2
-					}]
+	
+			prev = u;
+		}
+	
+		if (!last.d) return;
+	
+		batteryValue.textContent = last.b.toFixed(0) + " %";
+		voltageValue.textContent = last.v.toFixed(2) + " V";
+		uptimeValue.textContent = (last.u / 3600).toFixed(1) + " h";
+		timeValue.textContent = last.d.toLocaleString();
+	
+		resetBody.innerHTML = "";
+	
+		resets.reverse().forEach(r => {
+			resetBody.insertAdjacentHTML("beforeend",
+				`<tr>
+					<td>${r.d.toLocaleString()}</td>
+					<td>${r.v.toFixed(2)} V</td>
+					<td>${r.b.toFixed(0)} %</td>
+					<td>${r.p.toFixed(1)} h</td>
+				</tr>`);
+		});
+	
+		if (chart) {
+			chart.data.datasets[0].data = data;
+			chart.options.plugins.annotation.annotations = ann;
+			chart.update();
+			return;
+		}
+	
+		chart = new Chart(document.getElementById("voltageChart"), {
+			type: "line",
+			data: {
+				datasets: [{
+					label: "Voltaje",
+					data: data,
+					borderWidth: 2,
+					tension: 0.25,
+					pointRadius: 3,
+					pointHoverRadius: 6,
+					hitRadius: 15
+				}]
+			},
+			options: {
+				responsive: true,
+				maintainAspectRatio: false,
+				interaction: {
+					mode: "nearest",
+					intersect: false
 				},
-				options: {
-					plugins: {
-						legend: {
-							display: false
-						},
-						annotation: {
-							annotations: ann
-						},
-						zoom: {
-							pan: {
-								enabled: true,
-								mode: "x"
-							},
-							zoom: {
-								wheel: {
-									enabled: true
-								},
-								mode: "x"
+				plugins: {
+					tooltip: {
+						enabled: true,
+						mode: "nearest",
+						intersect: false,
+						callbacks: {
+							label: function(context) {
+								return context.parsed.y.toFixed(2) + " V";
 							}
 						}
 					},
-					scales: {
-						x: {
-							type: "time"
+					legend: {
+						display: false
+					},
+					annotation: {
+						annotations: ann
+					},
+					zoom: {
+						pan: {
+							enabled: true,
+							mode: "x"
 						},
-						y: {
-							min: 3.5,
-							max: 4.2
+						zoom: {
+							wheel: {
+								enabled: true
+							},
+							pinch: {
+								enabled: true
+							},
+							mode: "x"
+						}
+					}
+				},
+				scales: {
+					x: {
+						type: "time"
+					},
+					y: {
+						min: 3.5,
+						max: 4.2,
+						title: {
+							display: true,
+							text: "Voltaje (V)"
 						}
 					}
 				}
-			});
-		}
-		loadCSV();
-		setInterval(loadCSV, 60000);
+			}
+		});
+	}
+	
+	loadCSV();
+	setInterval(loadCSV, 60000);
 	</script>
 </body>
 
