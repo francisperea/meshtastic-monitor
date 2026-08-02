@@ -69,11 +69,8 @@
 </head>
 
 <body>
-	<h1>Meshtastic Battery Monitor</h1>
+	<h1>Meshtastic Monitor</h1>
 	<div id="cards">
-		<div class="card"><b>Batería</b>
-			<div id="batteryValue">-- %</div>
-		</div>
 		<div class="card"><b>Voltaje</b>
 			<div id="voltageValue">-- V</div>
 		</div>
@@ -168,7 +165,7 @@
 	
 		if (!last.d) return;
 	
-		batteryValue.textContent = last.b.toFixed(0) + " %";
+		//batteryValue.textContent = last.b.toFixed(0) + " %";
 		voltageValue.textContent = last.v.toFixed(2) + " V";
 		uptimeValue.textContent = formatUptime(last.u);
 		timeValue.textContent = last.d.toLocaleString();
