@@ -104,6 +104,19 @@
 	<script>
 	let chart;
 	
+	function formatUptime(seconds) {
+	
+		const days = Math.floor(seconds / 86400);
+		seconds %= 86400;
+		const hours = Math.floor(seconds / 3600);
+		seconds %= 3600;
+		const minutes = Math.floor(seconds / 60);
+		if (days > 0)
+			return `${days}d ${hours}h ${minutes}m`;
+		return `${hours}h ${minutes}m`;
+	
+	}
+	
 	async function loadCSV() {
 		const txt = await (await fetch("battery.csv?" + Date.now())).text();
 		const lines = txt.trim().split("\n");
@@ -157,7 +170,7 @@
 	
 		batteryValue.textContent = last.b.toFixed(0) + " %";
 		voltageValue.textContent = last.v.toFixed(2) + " V";
-		uptimeValue.textContent = (last.u / 3600).toFixed(1) + " h";
+		uptimeValue.textContent = formatUptime(last.u);
 		timeValue.textContent = last.d.toLocaleString();
 	
 		resetBody.innerHTML = "";
@@ -168,7 +181,7 @@
 					<td>${r.d.toLocaleString()}</td>
 					<td>${r.v.toFixed(2)} V</td>
 					<td>${r.b.toFixed(0)} %</td>
-					<td>${r.p.toFixed(1)} h</td>
+					<td>${formatUptime(r.p * 3600)}</td>
 				</tr>`);
 		});
 	
