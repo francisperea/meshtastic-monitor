@@ -92,7 +92,6 @@
 			<tr>
 				<th>Fecha</th>
 				<th>Voltaje</th>
-				<th>Batería</th>
 				<th>Uptime anterior</th>
 			</tr>
 		</thead>
@@ -177,7 +176,6 @@
 				`<tr>
 					<td>${r.d.toLocaleString()}</td>
 					<td>${r.v.toFixed(2)} V</td>
-					<td>${r.b.toFixed(0)} %</td>
 					<td>${formatUptime(r.p * 3600)}</td>
 				</tr>`);
 		});
@@ -243,8 +241,21 @@
 					}
 				},
 				scales: {
+				
 					x: {
-						type: "time"
+						type: "time",
+						time: {
+							unit: "day",
+							displayFormats: {
+								day: "dd/MM"
+							}
+						},
+						ticks: {
+							autoSkip: true,
+							maxTicksLimit: 15,
+							minRotation: 90,
+							maxRotation: 90
+						}
 					},
 					y: {
 						min: 3.5,
