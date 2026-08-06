@@ -98,180 +98,191 @@
 		<tbody id="resetBody"></tbody>
 	</table>
 	<script>
-	let chart;
+		let chart;
 	
-	function formatUptime(seconds) {
+		function formatUptime(seconds) {
+			const days = Math.floor(seconds / 86400);
+			seconds %= 86400;
+			const hours = Math.floor(seconds / 3600);
+			seconds %= 3600;
+			const minutes = Math.floor(seconds / 60);
 	
-		const days = Math.floor(seconds / 86400);
-		seconds %= 86400;
-		const hours = Math.floor(seconds / 3600);
-		seconds %= 3600;
-		const minutes = Math.floor(seconds / 60);
-		if (days > 0)
-			return `${days}d ${hours}h ${minutes}m`;
-		return `${hours}h ${minutes}m`;
+			if (days > 0)
+				return `${days}d ${hours}h ${minutes}m`;
 	
-	}
+			return `${hours}h ${minutes}m`;
+		}
 	
-	async function loadCSV() {
-		const txt = await (await fetch("battery.csv?" + Date.now())).text();
-		const lines = txt.trim().split("\n");
-		lines.shift();
+		async function loadCSV() {
+			const txt = await (await fetch("battery.csv?" + Date.now())).text();
+			const lines = txt.trim().split("\n");
+			lines.shift();
 	
-		const data = [];
-		const ann = {};
-		const resets = [];
+			const data = [];
+			const ann = {};
+			const resets = [];
 	
-		let prev = null;
-		let last = {};
+			const STEP = 5;			// Mostrar 1 de cada 5 muestras
+			const AVG = 5;			// Media móvil de 5 muestras
+			const buffer = [];
 	
-		for (const l of lines) {
-			if (!l.trim()) continue;
+			let prev = null;
+			let last = {};
+			let index = 0;
 	
-			const c = l.split(",");
-			const d = new Date(c[0]);
-			const b = Math.min(Number(c[1]), 100);
-			const v = Number(c[2]);
-			const u = Number(c[3]);
+			for (const l of lines) {
+				if (!l.trim()) continue;
 	
-			data.push({
-				x: d,
-				y: v
-			});
+				const c = l.split(",");
+				const d = new Date(c[0]);
+				const b = Math.min(Number(c[1]), 100);
+				const v = Number(c[2]);
+				const u = Number(c[3]);
 	
-			last = { b, v, u, d };
+				buffer.push(v);
+				if (buffer.length > AVG)
+					buffer.shift();
 	
-			if (prev !== null && u < prev) {
-				ann["r" + resets.length] = {
-					type: "line",
-					xMin: d,
-					xMax: d,
-					borderColor: "red",
-					borderWidth: 2,
-					borderDash: [6, 4]
-				};
+				const avg = buffer.reduce((a, b) => a + b, 0) / buffer.length;
 	
-				resets.push({
-					d,
-					b,
-					v,
-					p: prev / 3600
-				});
+				if ((index++ % STEP) === 0) {
+					data.push({
+						x: d,
+						y: avg
+					});
+				}
+	
+				last = { b, v, u, d };
+	
+				if (prev !== null && u < prev) {
+					ann["r" + resets.length] = {
+						type: "line",
+						xMin: d,
+						xMax: d,
+						borderColor: "red",
+						borderWidth: 2,
+						borderDash: [6, 4]
+					};
+	
+					resets.push({
+						d,
+						v,
+						p: prev
+					});
+				}
+	
+				prev = u;
 			}
 	
-			prev = u;
-		}
+			if (!last.d) return;
 	
-		if (!last.d) return;
+			voltageValue.textContent = last.v.toFixed(2) + " V";
+			uptimeValue.textContent = formatUptime(last.u);
+			timeValue.textContent = last.d.toLocaleString();
 	
-		//batteryValue.textContent = last.b.toFixed(0) + " %";
-		voltageValue.textContent = last.v.toFixed(2) + " V";
-		uptimeValue.textContent = formatUptime(last.u);
-		timeValue.textContent = last.d.toLocaleString();
+			resetBody.innerHTML = "";
 	
-		resetBody.innerHTML = "";
+			resets.reverse().forEach(r => {
+				resetBody.insertAdjacentHTML("beforeend",
+					`<tr>
+						<td>${r.d.toLocaleString()}</td>
+						<td>${r.v.toFixed(2)} V</td>
+						<td>${formatUptime(r.p)}</td>
+					</tr>`);
+			});
 	
-		resets.reverse().forEach(r => {
-			resetBody.insertAdjacentHTML("beforeend",
-				`<tr>
-					<td>${r.d.toLocaleString()}</td>
-					<td>${r.v.toFixed(2)} V</td>
-					<td>${formatUptime(r.p * 3600)}</td>
-				</tr>`);
-		});
+			if (chart) {
+				chart.data.datasets[0].data = data;
+				chart.options.plugins.annotation.annotations = ann;
+				chart.update();
+				return;
+			}
 	
-		if (chart) {
-			chart.data.datasets[0].data = data;
-			chart.options.plugins.annotation.annotations = ann;
-			chart.update();
-			return;
-		}
-	
-		chart = new Chart(document.getElementById("voltageChart"), {
-			type: "line",
-			data: {
-				datasets: [{
-					label: "Voltaje",
-					data: data,
-					borderWidth: 2,
-					tension: 0.25,
-					pointRadius: 3,
-					pointHoverRadius: 6,
-					hitRadius: 15
-				}]
-			},
-			options: {
-				responsive: true,
-				maintainAspectRatio: false,
-				interaction: {
-					mode: "nearest",
-					intersect: false
+			chart = new Chart(document.getElementById("voltageChart"), {
+				type: "line",
+				data: {
+					datasets: [{					
+						label: "Voltaje",
+						data: data,
+						borderWidth: 2,
+						tension: 0.35,
+						cubicInterpolationMode: "monotone",
+						pointRadius: 0,
+						pointHoverRadius: 6,
+						hitRadius: 20					
+					}]
 				},
-				plugins: {
-					tooltip: {
-						enabled: true,
+				options: {
+					responsive: true,
+					maintainAspectRatio: false,
+					interaction: {
 						mode: "nearest",
-						intersect: false,
-						callbacks: {
-							label: function(context) {
-								return context.parsed.y.toFixed(2) + " V";
-							}
-						}
+						intersect: false
 					},
-					legend: {
-						display: false
-					},
-					annotation: {
-						annotations: ann
-					},
-					zoom: {
-						pan: {
+					plugins: {
+						tooltip: {
 							enabled: true,
-							mode: "x"
+							mode: "nearest",
+							intersect: false,
+							callbacks: {
+								label(context) {
+									return context.parsed.y.toFixed(2) + " V";
+								}
+							}
+						},
+						legend: {
+							display: false
+						},
+						annotation: {
+							annotations: ann
 						},
 						zoom: {
-							wheel: {
-								enabled: true
+							pan: {
+								enabled: true,
+								mode: "x"
 							},
-							pinch: {
-								enabled: true
-							},
-							mode: "x"
-						}
-					}
-				},
-				scales: {
-				
-					x: {
-						type: "time",
-						time: {
-							unit: "day",
-							displayFormats: {
-								day: "dd/MM"
+							zoom: {
+								wheel: {
+									enabled: true
+								},
+								pinch: {
+									enabled: true
+								},
+								mode: "x"
 							}
-						},
-						ticks: {
-							autoSkip: true,
-							maxTicksLimit: 15,
-							minRotation: 90,
-							maxRotation: 90
 						}
 					},
-					y: {
-						min: 3.5,
-						max: 4.2,
-						title: {
-							display: true,
-							text: "Voltaje (V)"
+					scales: {
+						x: {
+							type: "time",
+							time: {
+								unit: "day",
+								displayFormats: {
+									day: "dd/MM"
+								}
+							},
+							ticks: {
+								autoSkip: true,
+								maxTicksLimit: 15,
+								minRotation: 90,
+								maxRotation: 90
+							}
+						},
+						y: {
+							min: 3.5,
+							max: 4.2,
+							title: {
+								display: true,
+								text: "Voltaje (V)"
+							}
 						}
 					}
 				}
-			}
-		});
-	}
+			});
+		}
 	
-	loadCSV();
-	setInterval(loadCSV, 60000);
+		loadCSV();
+		setInterval(loadCSV, 60000);
 	</script>
 </body>
 
