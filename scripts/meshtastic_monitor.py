@@ -12,7 +12,7 @@ from pathlib import Path
 # CONFIGURACIÓN
 # ==========================================================
 
-HOST = "radiopi.francisperea.org"
+HOST = "radiopi.francisperea.org:4404"
 NODE = "!9a8b7cf4"
 
 MESHTASTIC = "/home/francis/meshtastic/bin/meshtastic"
